@@ -1,0 +1,20 @@
+# this is .gitignore file.
+# 以下是忽略的文件
+
+# 仅忽略当前路径下的build文件夹及其内所有的文件
+
+#VINS-Mono
+*/build/
+*/devel/
+*/build_clion/
+*/devel_clion/
+*/.vscode/
+
+#VINS_Mono_noted
+*/build/
+*/devel/
+*/build_clion/
+*/devel_clion/
+*/.vscode/
+
+#.gitignore
