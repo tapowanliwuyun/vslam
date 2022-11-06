@@ -92,7 +92,7 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
     // 前两帧都设置为KF，追踪过少也认为是KF
     if (frame_count < 2 || last_track_num < 20)
         return true;
-
+    //进行一个简单的视差的计算
     for (auto &it_per_id : feature)
     {
         // 计算的实际上是frame_count-1,也就是前一帧是否为关键帧
@@ -114,7 +114,7 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
         ROS_DEBUG("parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
         ROS_DEBUG("current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
         // 看看平均视差是否超过一个阈值
-        return parallax_sum / parallax_num >= MIN_PARALLAX;
+        return parallax_sum / parallax_num >= MIN_PARALLAX;//判断总的视差/总的点数 = 平均视差 是否大于 最小阈值；如果大于最小值就返回true；如果不大于最小值就返回false
     }
 }
 

@@ -14,11 +14,12 @@ void Estimator::setParameter()
 {
     for (int i = 0; i < NUM_OF_CAM; i++)
     {
-        tic[i] = TIC[i];
-        ric[i] = RIC[i];
+        tic[i] = TIC[i];//平移外参
+        ric[i] = RIC[i];//旋转外参
     }
     f_manager.setRic(ric);
     // 这里可以看到虚拟相机的用法
+    // 重投影误差的置信度，就是重投影的精度体现于这个置信度，统一设置为1.5个像素的
     ProjectionFactor::sqrt_info = FOCAL_LENGTH / 1.5 * Matrix2d::Identity();
     ProjectionTdFactor::sqrt_info = FOCAL_LENGTH / 1.5 * Matrix2d::Identity();
     td = TD;
@@ -138,7 +139,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     ROS_DEBUG("new image coming ------------------------------------------");
     ROS_DEBUG("Adding feature points %lu", image.size());
     // Step 1 将特征点信息加到f_manager这个特征点管理器中，同时进行是否关键帧的检查
-    if (f_manager.addFeatureCheckParallax(frame_count, image, td))
+    if (f_manager.addFeatureCheckParallax(frame_count, image, td))//如果是返回的true，说明视差大于阈值，倒数第二帧是关键帧
         // 如果上一帧是关键帧，则滑窗中最老的帧就要被移出滑窗
         marginalization_flag = MARGIN_OLD;
     else
@@ -182,8 +183,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             }
         }
     }
-
-    if (solver_flag == INITIAL)
+    //基于纯视觉的三维重建
+    if (solver_flag == INITIAL)//初始化标志位
     {
         if (frame_count == WINDOW_SIZE) // 有足够的帧数
         {
@@ -192,12 +193,12 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             // Step 3： VIO初始化
             if( ESTIMATE_EXTRINSIC != 2 && (header.stamp.toSec() - initial_timestamp) > 0.1)
             {
-               result = initialStructure();
+               result = initialStructure();//单目视觉三维重建
                initial_timestamp = header.stamp.toSec();
             }
             if(result)
             {
-                solver_flag = NON_LINEAR;
+                solver_flag = NON_LINEAR;//
                 // Step 4： 非线性优化求解VIO
                 solveOdometry();
                 // Step 5： 滑动窗口
@@ -260,7 +261,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
 bool Estimator::initialStructure()
 {
     TicToc t_sfm;
-    // Step 1 check imu observibility
+    // Step 1 check imu observibility 检查IMU能观性
     {
         map<double, ImageFrame>::iterator frame_it;
         Vector3d sum_g;
@@ -290,10 +291,12 @@ bool Estimator::initialStructure()
         if(var < 0.25)
         {
             ROS_INFO("IMU excitation not enouth!");
-            //return false;
+            //return false; //作者的考量可能是：虽然标准差不是很足够，但是仍然可以比较好的初始化结果
+                                            //但是计算机视觉life的讲师认为：这个打开还是很有必要的，运动如果不足够的话，如静止或匀速直线运动，匀速直线运动虽然对视觉三维重建不会有什么影响，但是比较影响IMU的能观性
+                                            //注释掉这个说明：step1实际上没有起作用，但是还是提供了一个很好的思路
         }
     }
-    // Step 2 global sfm
+    // Step 2 global sfm 三维重建
     // 做一个纯视觉slam
     Quaterniond Q[frame_count + 1];
     Vector3d T[frame_count + 1];
@@ -304,7 +307,7 @@ bool Estimator::initialStructure()
     {
         int imu_j = it_per_id.start_frame - 1;  // 这个跟imu无关，就是存储观测特征点的帧的索引
         SFMFeature tmp_feature; // 用来后续做sfm
-        tmp_feature.state = false;
+        tmp_feature.state = false;//true的意思就代表着已经被三角化成功了，刚开始肯定都没有，所以是false
         tmp_feature.id = it_per_id.feature_id;
         for (auto &it_per_frame : it_per_id.feature_per_frame)
         {
@@ -317,8 +320,8 @@ bool Estimator::initialStructure()
     } 
     Matrix3d relative_R;
     Vector3d relative_T;
-    int l;
-    if (!relativePose(relative_R, relative_T, l))
+    int l; //枢纽帧在滑窗中的索引
+    if (!relativePose(relative_R, relative_T, l))// 寻找枢纽帧
     {
         ROS_INFO("Not enough features or parallax; Move device around");
         return false;

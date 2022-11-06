@@ -55,6 +55,11 @@ void readParameters(ros::NodeHandle &n)
     NUM_ITERATIONS = fsSettings["max_num_iterations"];  // 单词优化最大迭代次数
     MIN_PARALLAX = fsSettings["keyframe_parallax"]; // 根据视差确定关键帧
     MIN_PARALLAX = MIN_PARALLAX / FOCAL_LENGTH;
+    //虚拟相机的trick
+    //每个相机的分辨率是不同的，MIN_PARALLAX 是需要根据相机分辨率来调整的，相机的分辨率大，这个参数就会大一点
+    //为了避免这种情况出现，通过一个虚拟相机的焦距，统一认为焦距是固定的，因为之前已经把所有特征点全部处理到归一化相机平面上去了
+    //这个时候通过这个统一的焦距参数，无论是用什么像素的相机拍摄的相片，从归一化相机平面都可以通过同一个参数将其映射到虚拟相机上
+    //然后以为虚拟相机配置的这个参数 MIN_PARALLAX 作为阈值
 
     std::string OUTPUT_PATH;
     fsSettings["output_path"] >> OUTPUT_PATH;
@@ -68,13 +73,13 @@ void readParameters(ros::NodeHandle &n)
     fout.close();
 
     // imu、图像相关参数
-    ACC_N = fsSettings["acc_n"];
-    ACC_W = fsSettings["acc_w"];
-    GYR_N = fsSettings["gyr_n"];
-    GYR_W = fsSettings["gyr_w"];
-    G.z() = fsSettings["g_norm"];
-    ROW = fsSettings["image_height"];
-    COL = fsSettings["image_width"];
+    ACC_N = fsSettings["acc_n"];//加速度计噪声
+    ACC_W = fsSettings["acc_w"];//加速度计的随机游走
+    GYR_N = fsSettings["gyr_n"];//陀螺仪的噪声
+    GYR_W = fsSettings["gyr_w"];//陀螺仪的随机游走
+    G.z() = fsSettings["g_norm"];//重力的方向
+    ROW = fsSettings["image_height"];//图像的参数
+    COL = fsSettings["image_width"];//图像的参数
     ROS_INFO("ROW: %f COL: %f ", ROW, COL);
 
     ESTIMATE_EXTRINSIC = fsSettings["estimate_extrinsic"];
@@ -112,8 +117,8 @@ void readParameters(ros::NodeHandle &n)
         
     } 
 
-    INIT_DEPTH = 5.0;
-    BIAS_ACC_THRESHOLD = 0.1;
+    INIT_DEPTH = 5.0;   // 特征点深度的默认值
+    BIAS_ACC_THRESHOLD = 0.1;   //没用到
     BIAS_GYR_THRESHOLD = 0.1;
 
     // 传感器时间延时相关

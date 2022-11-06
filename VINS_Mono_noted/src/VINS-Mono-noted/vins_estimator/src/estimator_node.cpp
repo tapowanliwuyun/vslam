@@ -66,10 +66,11 @@ void predict(const sensor_msgs::ImuConstPtr &imu_msg)
     double ry = imu_msg->angular_velocity.y;
     double rz = imu_msg->angular_velocity.z;
     Eigen::Vector3d angular_velocity{rx, ry, rz};
-    // 上一时刻世界坐标系下加速度值
+    // 上一时刻世界坐标系下加速度值 un_acc_0 =  Rwi * (上一时刻加速度计读数 - 零偏) - 重力方向  ; 
+    // Rwi 是上一时刻IMU的位姿在世界坐标系下的位姿
     Eigen::Vector3d un_acc_0 = tmp_Q * (acc_0 - tmp_Ba) - estimator.g;
 
-    // 中值陀螺仪的结果
+    // 中值陀螺仪的结果   un_gyr = 0.5 * (上一时刻陀螺仪的值 + 这一时刻陀螺仪的值) - 零偏
     Eigen::Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - tmp_Bg;
     // 更新姿态
     tmp_Q = tmp_Q * Utility::deltaQ(un_gyr * dt);
@@ -167,11 +168,11 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
         return;
     }
     last_imu_t = imu_msg->header.stamp.toSec();
-    // 讲一下线程锁 条件变量用法
+    // 讲一下线程锁 条件变量用法 https://www.jianshu.com/p/c1dfa1d40f53 
     m_buf.lock();
     imu_buf.push(imu_msg);
     m_buf.unlock();
-    con.notify_one();
+    con.notify_one();//条件变量
 
     last_imu_t = imu_msg->header.stamp.toSec();
 
@@ -340,7 +341,7 @@ void process()
                 int v = img_msg->channels[0].values[i] + 0.5;
                 int feature_id = v / NUM_OF_CAM;
                 int camera_id = v % NUM_OF_CAM;
-                double x = img_msg->points[i].x;    // 去畸变后归一滑像素坐标
+                double x = img_msg->points[i].x;    // 去畸变后归一化相机系坐标
                 double y = img_msg->points[i].y;
                 double z = img_msg->points[i].z;
                 double p_u = img_msg->channels[1].values[i];    // 特征点像素坐标

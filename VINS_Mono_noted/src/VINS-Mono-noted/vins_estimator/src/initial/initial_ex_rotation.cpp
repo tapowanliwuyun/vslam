@@ -33,7 +33,7 @@ bool InitialEXRotation::CalibrationExRotation(vector<pair<Vector3d, Vector3d>> c
         double huber = angular_distance > 5.0 ? 5.0 / angular_distance : 1.0;
         ++sum_ok;
         Matrix4d L, R;
-
+        // 四元数转换为矩阵的乘法，不同的是，这里是虚部在前，实部在后，这里只需要转置一下就行
         double w = Quaterniond(Rc[i]).w();
         Vector3d q = Quaterniond(Rc[i]).vec();
         L.block<3, 3>(0, 0) = w * Matrix3d::Identity() + Utility::skewSymmetric(q);
@@ -54,8 +54,8 @@ bool InitialEXRotation::CalibrationExRotation(vector<pair<Vector3d, Vector3d>> c
 
     JacobiSVD<MatrixXd> svd(A, ComputeFullU | ComputeFullV);
     Matrix<double, 4, 1> x = svd.matrixV().col(3);
-    Quaterniond estimated_R(x);
-    ric = estimated_R.toRotationMatrix().inverse();
+    Quaterniond estimated_R(x);//实际上求解的是qci，也就是在camera坐标系下imu的旋转
+    ric = estimated_R.toRotationMatrix().inverse();//想得到的是qic，也就是imu坐标系下camera的旋转
     //cout << svd.singularValues().transpose() << endl;
     //cout << ric << endl;
     Vector3d ric_cov;
@@ -83,9 +83,9 @@ Matrix3d InitialEXRotation::solveRelativeR(const vector<pair<Vector3d, Vector3d>
         // 这里用的是相机坐标系，因此这个函数得到的也就是E矩阵
         cv::Mat E = cv::findFundamentalMat(ll, rr);
         cv::Mat_<double> R1, R2, t1, t2;
-        decomposeE(E, R1, R2, t1, t2);
+        decomposeE(E, R1, R2, t1, t2);//本质矩阵的分解
 
-        // 旋转矩阵的行列式应该是1,这里如果是-1就取一下反
+        // 旋转矩阵的行列式应该是1,这里如果是-1就取一下反然后重新分解
         if (determinant(R1) + 1.0 < 1e-09)
         {
             E = -E;

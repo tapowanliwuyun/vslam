@@ -18,4 +18,16 @@
 */devel_clion/
 */.vscode/
 
+#realsense_l515
+*/build/
+*/devel/
+*/install/
+
+
+#VINS_Mono_l515
+*/build/
+*/devel/
+*/data/
+
+
 #.gitignore
