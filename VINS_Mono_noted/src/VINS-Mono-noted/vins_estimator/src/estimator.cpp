@@ -328,9 +328,9 @@ bool Estimator::initialStructure()
     }
     GlobalSFM sfm;
     // 进行sfm的求解
-    if(!sfm.construct(frame_count + 1, Q, T, l,
-              relative_R, relative_T,
-              sfm_f, sfm_tracked_points))
+    if(!sfm.construct(frame_count + 1, Q, T, l, // frame_count 是滑窗里帧的总数
+              relative_R, relative_T, // 这是求出的  枢纽帧 与 最后一帧 之间的相对位姿关系
+              sfm_f, sfm_tracked_points)) // sfm_f 是每一帧
     {
         ROS_DEBUG("global SFM failed!");
         marginalization_flag = MARGIN_OLD;
@@ -459,10 +459,10 @@ bool Estimator::visualInitialAlign()
     //triangulat on cam pose , no tic
     Vector3d TIC_TMP[NUM_OF_CAM];
     for(int i = 0; i < NUM_OF_CAM; i++)
-        TIC_TMP[i].setZero();
-    ric[0] = RIC[0];
+        TIC_TMP[i].setZero();//应该是初始的平移外参
+    ric[0] = RIC[0];//旋转外参
     f_manager.setRic(ric);
-    // 多约束三角化所有的特征点，注意，仍带是尺度模糊的
+    // 多约束三角化所有的特征点，注意，仍带是尺度模糊的    ;三角化得到的深度值实际上就是第一个观察到这个特征点的相机坐标系下的深度值
     f_manager.triangulate(Ps, &(TIC_TMP[0]), &(RIC[0]));
 
     double s = (x.tail<1>())(0);
@@ -473,7 +473,7 @@ bool Estimator::visualInitialAlign()
     }
     // 下面开始把所有的状态对齐到第0帧的imu坐标系
     for (int i = frame_count; i >= 0; i--)
-        // twi - tw0 = toi,就是把所有的平移对齐到滑窗中的第0帧
+        // twi - tw0 = toi,就是把所有的平移对齐到滑窗中的第0帧  ，但是这个向量仍然在枢纽帧坐标系下 //Rs是已经全部转换到枢纽帧下的对应时刻IMU坐标系
         Ps[i] = s * Ps[i] - Rs[i] * TIC[0] - (s * Ps[0] - Rs[0] * TIC[0]);
     int kv = -1;
     map<double, ImageFrame>::iterator frame_i;
@@ -483,7 +483,7 @@ bool Estimator::visualInitialAlign()
         if(frame_i->second.is_key_frame)
         {
             kv++;
-            // 当时求得速度是imu系，现在转到world系
+            // 当时求得速度是imu系，现在转到world系（仍然是枢纽帧下的）；
             Vs[kv] = frame_i->second.R * x.segment<3>(kv * 3);
         }
     }
@@ -493,13 +493,13 @@ bool Estimator::visualInitialAlign()
         it_per_id.used_num = it_per_id.feature_per_frame.size();
         if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
             continue;
-        it_per_id.estimated_depth *= s;
+        it_per_id.estimated_depth *= s;//在相机坐标系下的深度
     }
     // 所有的P V Q全部对齐到第0帧的，同时和对齐到重力方向
-    Matrix3d R0 = Utility::g2R(g);  // g是枢纽帧下的重力方向，得到R_w_j
-    double yaw = Utility::R2ypr(R0 * Rs[0]).x();    // Rs[0]实际上是R_j_0
-    R0 = Utility::ypr2R(Eigen::Vector3d{-yaw, 0, 0}) * R0;  // 第一帧yaw赋0
-    g = R0 * g;
+    Matrix3d R0 = Utility::g2R(g);  // g是枢纽帧下的重力方向，得到R_w_j  //把枢纽帧j对齐到真正的世界坐标系w下去，得到枢纽帧相对于真正世界坐标系下的旋转矩阵
+    double yaw = Utility::R2ypr(R0 * Rs[0]).x();    // Rs[0]实际上是R_j_0，相对于枢纽帧的第0帧的旋转矩阵;  第0帧相对于世界坐标系yaw角
+    R0 = Utility::ypr2R(Eigen::Vector3d{-yaw, 0, 0}) * R0;  // 第0帧yaw赋0
+    g = R0 * g;//得到第0帧下的重力加速度；R0为第0帧下的枢纽帧的变换
     //Matrix3d rot_diff = R0 * Rs[0].transpose();
     Matrix3d rot_diff = R0;
     for (int i = 0; i <= frame_count; i++)
@@ -529,10 +529,10 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
 {
     // find previous frame which contians enough correspondance and parallex with newest frame
     // 优先从最前面开始
-    for (int i = 0; i < WINDOW_SIZE; i++)
+    for (int i = 0; i < WINDOW_SIZE; i++)//从第0帧开始检查
     {
         vector<pair<Vector3d, Vector3d>> corres;
-        corres = f_manager.getCorresponding(i, WINDOW_SIZE);
+        corres = f_manager.getCorresponding(i, WINDOW_SIZE);//检查第i帧与第WINDOW_SIZE帧的匹配对
         // 要求共视的特征点足够多
         if (corres.size() > 20)
         {
@@ -548,10 +548,10 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
             }
             // 计算每个特征点的平均视差
             average_parallax = 1.0 * sum_parallax / int(corres.size());
-            // 有足够的视差在通过本质矩阵恢复第i帧和最后一帧之间的 R t T_i_last
+            // 有足够的视差在通过本质矩阵恢复第i帧和最后一帧之间的 R t T_i_last； 460是虚拟相机的焦距； 视差大于30个像素
             if(average_parallax * 460 > 30 && m_estimator.solveRelativeRT(corres, relative_R, relative_T))
             {
-                l = i;
+                l = i;//确认枢纽帧在滑动窗口中的输出
                 ROS_DEBUG("average_parallax %f choose l %d and newest frame to triangulate the whole structure", average_parallax * 460, l);
                 return true;
             }
@@ -562,10 +562,10 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
 
 void Estimator::solveOdometry()
 {
-    // 保证滑窗中帧数满了
+    // 保证滑窗中帧数满了，初始化的时候已经有过类似的判断，这里判断有点重复了，因为划窗不填满初始化没办法做完，初始化不做完，就不可能进到后端优化这个模块来
     if (frame_count < WINDOW_SIZE)
         return;
-    // 其次要求初始化完成
+    // 其次要求初始化完成，这个判断其实也有点重复
     if (solver_flag == NON_LINEAR)
     {
         TicToc t_tri;
@@ -577,7 +577,7 @@ void Estimator::solveOdometry()
 }
 
 /**
- * @brief 由于ceres的参数块都是double数组，因此这里把参数块从eigen的表示转成double数组
+ * @brief 由于 ceres 的参数块都是 double 数组，因此这里把参数块从 eigen 的表示转成 double 数组
  * 
  */
 void Estimator::vector2double()
@@ -734,7 +734,7 @@ bool Estimator::failureDetection()
         ROS_INFO(" little feature %d", f_manager.last_track_num);
         //return true;
     }
-    if (Bas[WINDOW_SIZE].norm() > 2.5)  // 零偏是否正常
+    if (Bas[WINDOW_SIZE].norm() > 2.5)  // 零偏是否正常，加速度零偏大于2.5弧度
     {
         ROS_INFO(" big IMU acc bias estimation %f", Bas[WINDOW_SIZE].norm());
         return true;
@@ -785,26 +785,26 @@ void Estimator::optimization()
     ceres::Problem problem;
     ceres::LossFunction *loss_function;
     //loss_function = new ceres::HuberLoss(1.0);
-    loss_function = new ceres::CauchyLoss(1.0);
+    loss_function = new ceres::CauchyLoss(1.0);//定义核函数，残差越大，影响越小
     // Step 1 定义待优化的参数块，类似g2o的顶点
     // 参数块 1： 滑窗中位姿包括位置和姿态，共11帧
     for (int i = 0; i < WINDOW_SIZE + 1; i++)
     {
         // 由于姿态不满足正常的加法，也就是李群上没有加法，因此需要自己定义他的加法
         ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
-        problem.AddParameterBlock(para_Pose[i], SIZE_POSE, local_parameterization);
-        problem.AddParameterBlock(para_SpeedBias[i], SIZE_SPEEDBIAS);
+        problem.AddParameterBlock(para_Pose[i], SIZE_POSE, local_parameterization);//增加参数块；将划窗中所有的参数块加到这个优化问题中来；第一个是指针，二维数组的指针；第二个参数是参数块的大小；第三个参数是自增的方式
+        problem.AddParameterBlock(para_SpeedBias[i], SIZE_SPEEDBIAS);//将速度和bias这个参数也加进来
     }
     // 参数块 2： 相机imu间的外参
     for (int i = 0; i < NUM_OF_CAM; i++)
     {
         ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
         problem.AddParameterBlock(para_Ex_Pose[i], SIZE_POSE, local_parameterization);
-        if (!ESTIMATE_EXTRINSIC)
+        if (!ESTIMATE_EXTRINSIC)//一旦认为之前的外参足够精准，之后的优化就不会对外参进行优化，在下面可以体现出来
         {
             ROS_DEBUG("fix extinsic param");
             // 如果不需要优化外参就设置为fix
-            problem.SetParameterBlockConstant(para_Ex_Pose[i]);
+            problem.SetParameterBlockConstant(para_Ex_Pose[i]);//将该参数块固定，无论如何都不会进行优化的
         }
         else
             ROS_DEBUG("estimate extinsic param");
@@ -815,7 +815,7 @@ void Estimator::optimization()
         problem.AddParameterBlock(para_Td[0], 1);
         //problem.SetParameterBlockConstant(para_Td[0]);
     }
-    // 实际上还有地图点，其实平凡的参数块不需要调用AddParameterBlock，增加残差块接口时会自动绑定
+    // 实际上还有地图点，其实平凡的参数块不需要调用AddParameterBlock，增加残差块接口时会自动绑定；
     TicToc t_whole, t_prepare;
     // eigen -> double
     vector2double();
@@ -832,7 +832,7 @@ void Estimator::optimization()
     for (int i = 0; i < WINDOW_SIZE; i++)
     {
         int j = i + 1;
-        // 时间过长这个约束就不可信了
+        // 时间过长这个约束就不可信了，这里设置的超过10秒钟
         if (pre_integrations[j]->sum_dt > 10.0)
             continue;
         IMUFactor* imu_factor = new IMUFactor(pre_integrations[j]);
@@ -885,7 +885,7 @@ void Estimator::optimization()
             {
                 ProjectionFactor *f = new ProjectionFactor(pts_i, pts_j);   // 构造函数就是同一个特征点在不同帧的观测
                 // 约束的变量是该特征点的第一个观测帧以及其他一个观测帧，加上外参和特征点逆深度
-                problem.AddResidualBlock(f, loss_function, para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[0], para_Feature[feature_index]);
+                problem.AddResidualBlock(f, loss_function, para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[0], para_Feature[feature_index]);//loss_function剔除误匹配
             }
             f_m_cnt++;
         }
@@ -934,10 +934,10 @@ void Estimator::optimization()
     // Step 3 ceres优化求解
     ceres::Solver::Options options;
 
-    options.linear_solver_type = ceres::DENSE_SCHUR;
+    options.linear_solver_type = ceres::DENSE_SCHUR;//稠密矩阵
     //options.num_threads = 2;
-    options.trust_region_strategy_type = ceres::DOGLEG;
-    options.max_num_iterations = NUM_ITERATIONS;
+    options.trust_region_strategy_type = ceres::DOGLEG;//下降法采用dogleg法，正常应该是三种：高斯牛顿、LM、dogleg
+    options.max_num_iterations = NUM_ITERATIONS;//最大迭代次数
     //options.use_explicit_schur_complement = true;
     //options.minimizer_progress_to_stdout = true;
     //options.use_nonmonotonic_steps = true;
@@ -957,7 +957,7 @@ void Estimator::optimization()
     // Step 4 边缘化
     // 科普一下舒尔补
     TicToc t_whole_marginalization;
-    if (marginalization_flag == MARGIN_OLD)
+    if (marginalization_flag == MARGIN_OLD)// 判断倒数第二帧是否为关键帧，如果倒数第二帧是关键帧，就把最老的那帧相关的信息边缘化掉
     {
         // 一个用来边缘化操作的对象
         MarginalizationInfo *marginalization_info = new MarginalizationInfo();
@@ -991,7 +991,7 @@ void Estimator::optimization()
         }
         // 只有第1个预积分和待边缘化参数块相连
         {
-            if (pre_integrations[1]->sum_dt < 10.0)
+            if (pre_integrations[1]->sum_dt < 10.0)//之前也会有这个约束条件，836行
             {
                 // 跟构建ceres约束问题一样，这里也需要得到残差和雅克比
                 IMUFactor* imu_factor = new IMUFactor(pre_integrations[1]);
@@ -1042,7 +1042,7 @@ void Estimator::optimization()
                         ProjectionFactor *f = new ProjectionFactor(pts_i, pts_j);
                         ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(f, loss_function,
                                                                                        vector<double *>{para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[0], para_Feature[feature_index]},
-                                                                                       vector<int>{0, 3});  // 这里第0帧和地图点被margin
+                                                                                       vector<int>{0, 3});  // 这里第0帧和地图点被margin，为了避免维度过大
                         marginalization_info->addResidualBlockInfo(residual_block_info);
                     }
                 }

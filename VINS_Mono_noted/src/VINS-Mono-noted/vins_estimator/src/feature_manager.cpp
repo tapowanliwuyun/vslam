@@ -78,7 +78,7 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
         // 这是一个新的特征点
         if (it == feature.end())
         {
-            // 在特征点管理器中，新创建一个特征点id，这里的frame_count就是该特征点在滑窗中的当前位置，作为这个特征点的起始位置
+            // 在特征点管理器中，新创建一个特征点 id，这里的 frame_count 就是该特征点在滑窗中的当前位置，作为这个特征点的起始位置
             feature.push_back(FeaturePerId(feature_id, frame_count));
             feature.back().feature_per_frame.push_back(f_per_fra);
         }
@@ -282,15 +282,15 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
             // 得到该KF的相机坐标系位姿
             Eigen::Vector3d t1 = Ps[imu_j] + Rs[imu_j] * tic[0];
             Eigen::Matrix3d R1 = Rs[imu_j] * ric[0];
-            // T_w_cj -> T_c0_cj
+            // T_w_cj -> T_c0_cj  // 这里w坐标系就是前面说到的枢纽帧坐标系
             Eigen::Vector3d t = R0.transpose() * (t1 - t0);
             Eigen::Matrix3d R = R0.transpose() * R1;
             Eigen::Matrix<double, 3, 4> P;
             // T_c0_cj -> T_cj_c0相当于把c0当作世界系
             P.leftCols<3>() = R.transpose();
             P.rightCols<1>() = -R.transpose() * t;
-            Eigen::Vector3d f = it_per_frame.point.normalized();
-            // 构建超定方程的其中两个方程
+            Eigen::Vector3d f = it_per_frame.point.normalized();//单位化相当于整体缩放了一个系数，因为求解是整体为0，所以这里影响不大
+            // 构建超定方程的其中两个方程  //这里使用所有观测到该点的帧来三角化该问题
             svd_A.row(svd_idx++) = f[0] * P.row(2) - f[2] * P.row(0);
             svd_A.row(svd_idx++) = f[1] * P.row(2) - f[2] * P.row(1);
 

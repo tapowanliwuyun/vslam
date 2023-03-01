@@ -9,7 +9,7 @@
 
 #include <ceres/ceres.h>
 
-class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
+class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>//预积分的残差是15维；约束了两帧之间的位姿（7）以及速度和零偏（9），因为是两帧之间，所以是7，9，7，9
 {
   public:
     IMUFactor() = delete;
@@ -28,16 +28,16 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
     virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
     {
         // 便于后续计算，把参数块都转换成eigen
-        // imu预积分的约束的参数是相邻两帧的位姿 速度和零偏
-        Eigen::Vector3d Pi(parameters[0][0], parameters[0][1], parameters[0][2]);
-        Eigen::Quaterniond Qi(parameters[0][6], parameters[0][3], parameters[0][4], parameters[0][5]);
+        // imu预积分的约束的参数是相邻两帧的位姿 速度和零偏；i表示前一帧，j表示后一帧
+        Eigen::Vector3d Pi(parameters[0][0], parameters[0][1], parameters[0][2]);//前一帧的位移,Pw_i
+        Eigen::Quaterniond Qi(parameters[0][6], parameters[0][3], parameters[0][4], parameters[0][5]);//前一帧的姿态。是Rw_i
 
         Eigen::Vector3d Vi(parameters[1][0], parameters[1][1], parameters[1][2]);
         Eigen::Vector3d Bai(parameters[1][3], parameters[1][4], parameters[1][5]);
         Eigen::Vector3d Bgi(parameters[1][6], parameters[1][7], parameters[1][8]);
 
-        Eigen::Vector3d Pj(parameters[2][0], parameters[2][1], parameters[2][2]);
-        Eigen::Quaterniond Qj(parameters[2][6], parameters[2][3], parameters[2][4], parameters[2][5]);
+        Eigen::Vector3d Pj(parameters[2][0], parameters[2][1], parameters[2][2]);//Pw_j
+        Eigen::Quaterniond Qj(parameters[2][6], parameters[2][3], parameters[2][4], parameters[2][5]);//Rw_j
 
         Eigen::Vector3d Vj(parameters[3][0], parameters[3][1], parameters[3][2]);
         Eigen::Vector3d Baj(parameters[3][3], parameters[3][4], parameters[3][5]);
@@ -67,12 +67,12 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
         }
 #endif
 
-        Eigen::Map<Eigen::Matrix<double, 15, 1>> residual(residuals);
+        Eigen::Map<Eigen::Matrix<double, 15, 1>> residual(residuals);//残差
         // 得到残差
         residual = pre_integration->evaluate(Pi, Qi, Vi, Bai, Bgi,
                                             Pj, Qj, Vj, Baj, Bgj);
         // 因为ceres没有g2o设置信息矩阵的接口，因此置信度直接乘在残差上，这里通过LLT分解，相当于将信息矩阵开根号
-        Eigen::Matrix<double, 15, 15> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 15, 15>>(pre_integration->covariance.inverse()).matrixL().transpose();
+        Eigen::Matrix<double, 15, 15> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 15, 15>>(pre_integration->covariance.inverse()).matrixL().transpose();//得到的是L
         //sqrt_info.setIdentity();
         // 这就是带有信息矩阵的残差
         residual = sqrt_info * residual;
@@ -106,13 +106,13 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 #if 0
             jacobian_pose_i.block<3, 3>(O_R, O_R) = -(Qj.inverse() * Qi).toRotationMatrix();
 #else
-                Eigen::Quaterniond corrected_delta_q = pre_integration->delta_q * Utility::deltaQ(dq_dbg * (Bgi - pre_integration->linearized_bg));
+                Eigen::Quaterniond corrected_delta_q = pre_integration->delta_q * Utility::deltaQ(dq_dbg * (Bgi - pre_integration->linearized_bg));//零偏实时修正
                 jacobian_pose_i.block<3, 3>(O_R, O_R) = -(Utility::Qleft(Qj.inverse() * Qi) * Utility::Qright(corrected_delta_q)).bottomRightCorner<3, 3>();
 #endif
 
                 jacobian_pose_i.block<3, 3>(O_V, O_R) = Utility::skewSymmetric(Qi.inverse() * (G * sum_dt + Vj - Vi));
 
-                jacobian_pose_i = sqrt_info * jacobian_pose_i;
+                jacobian_pose_i = sqrt_info * jacobian_pose_i;//因为残差乘，所以这个雅可比也要乘
 
                 if (jacobian_pose_i.maxCoeff() > 1e8 || jacobian_pose_i.minCoeff() < -1e8)
                 {
@@ -165,7 +165,7 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 #endif
 
                 jacobian_pose_j = sqrt_info * jacobian_pose_j;
-
+ 
                 //ROS_ASSERT(fabs(jacobian_pose_j.maxCoeff()) < 1e8);
                 //ROS_ASSERT(fabs(jacobian_pose_j.minCoeff()) < 1e8);
             }

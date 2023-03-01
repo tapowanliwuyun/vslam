@@ -33,7 +33,7 @@ void GlobalSFM::triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matr
 /**
  * @brief 根据上一帧的位姿通过pnp求解当前帧的位姿
  * 
- * @param[in] R_initial 上一帧的位姿
+ * @param[in] R_initial 上一帧的位姿 ， 对于初值，由于使用的是pnp求解的方法，所以初值要是尽可能接近的值
  * @param[in] P_initial 
  * @param[in] i 	当前帧的索引
  * @param[in] sfm_f 	所有特征点的信息
@@ -72,9 +72,9 @@ bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
 	}
 	cv::Mat r, rvec, t, D, tmp_r;
 	cv::eigen2cv(R_initial, tmp_r);
-	cv::Rodrigues(tmp_r, rvec);
+	cv::Rodrigues(tmp_r, rvec);//旋转矩阵 -》旋转向量
 	cv::eigen2cv(P_initial, t);
-	cv::Mat K = (cv::Mat_<double>(3, 3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);
+	cv::Mat K = (cv::Mat_<double>(3, 3) << 1, 0, 0, 0, 1, 0, 0, 0, 1); //虚拟相机的虚拟内参
 	bool pnp_succ;
 	pnp_succ = cv::solvePnP(pts_3_vector, pts_2_vector, K, D, rvec, t, 1);
 	if(!pnp_succ)
@@ -274,7 +274,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 			sfm_f[j].position[1] = point_3d(1);
 			sfm_f[j].position[2] = point_3d(2);
 			//cout << "trangulated : " << frame_0 << " " << frame_1 << "  3d point : "  << j << "  " << point_3d.transpose() << endl;
-		}		
+		}
 	}
 
 /*
@@ -333,19 +333,19 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 												sfm_f[i].observation[j].second.x(),
 												sfm_f[i].observation[j].second.y());
 				// 约束了这一帧位姿和3d地图点
-    		problem.AddResidualBlock(cost_function, NULL, c_rotation[l], c_translation[l], 
-    								sfm_f[i].position);	 
+    		problem.AddResidualBlock(cost_function, NULL, c_rotation[l], c_translation[l], 	
+    								sfm_f[i].position);	 	// 第二个参数为核函数；第三四五参数为优化的参数块
 		}
 
 	}
 	ceres::Solver::Options options;
-	options.linear_solver_type = ceres::DENSE_SCHUR;
+	options.linear_solver_type = ceres::DENSE_SCHUR;//线性求解的类型
 	//options.minimizer_progress_to_stdout = true;
-	options.max_solver_time_in_seconds = 0.2;
+	options.max_solver_time_in_seconds = 0.2;//最大的求解时间
 	ceres::Solver::Summary summary;
 	ceres::Solve(options, &problem, &summary);
 	//std::cout << summary.BriefReport() << "\n";
-	if (summary.termination_type == ceres::CONVERGENCE || summary.final_cost < 5e-03)
+	if (summary.termination_type == ceres::CONVERGENCE || summary.final_cost < 5e-03) //ceres::CONVERGENCE 说明终止的条件为收敛，而非超时；后者为最终cost
 	{
 		//cout << "vision only BA converge" << endl;
 	}

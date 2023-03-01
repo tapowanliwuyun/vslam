@@ -15,7 +15,7 @@ void ResidualBlockInfo::Evaluate()
     for (int i = 0; i < static_cast<int>(block_sizes.size()); i++)
     {
         jacobians[i].resize(cost_function->num_residuals(), block_sizes[i]);    // 雅克比矩阵大小 残差×变量
-        raw_jacobians[i] = jacobians[i].data();
+        raw_jacobians[i] = jacobians[i].data();//取出索引
         //dim += block_sizes[i] == 7 ? 6 : block_sizes[i];
     }
     // 调用各自重载的接口计算残差和雅克比
@@ -100,15 +100,15 @@ void MarginalizationInfo::addResidualBlockInfo(ResidualBlockInfo *residual_block
 {
     factors.emplace_back(residual_block_info);  // 残差块收集起来
 
-    std::vector<double *> &parameter_blocks = residual_block_info->parameter_blocks;    // 这个是和该约束相关的参数块
+    std::vector<double *> &parameter_blocks = residual_block_info->parameter_blocks;    // 这个是和该约束相关的参数块，获得参数块的起始地址
     std::vector<int> parameter_block_sizes = residual_block_info->cost_function->parameter_block_sizes();   // 各个参数块的大小
 
-    for (int i = 0; i < static_cast<int>(residual_block_info->parameter_blocks.size()); i++)
+    for (int i = 0; i < static_cast<int>(residual_block_info->parameter_blocks.size()); i++)//遍历参数块
     {
         double *addr = parameter_blocks[i];
         int size = parameter_block_sizes[i];
-        // 这里是个map，避免重复添加
-        parameter_block_size[reinterpret_cast<long>(addr)] = size;  // 地址->global size
+        // 这里是个unordered map，避免重复添加 
+        parameter_block_size[reinterpret_cast<long>(addr)] = size;  // 地址->global size，位姿的 global size 为7，local size 为 6
     }
     // 待边缘化的参数块
     for (int i = 0; i < static_cast<int>(residual_block_info->drop_set.size()); i++)
@@ -120,7 +120,7 @@ void MarginalizationInfo::addResidualBlockInfo(ResidualBlockInfo *residual_block
 }
 
 /**
- * @brief 将各个残差块计算残差和雅克比，同时备份所有相关的参数块内容
+ * @brief 将各个残差块计算残差和雅克比，同时备份所有相关的参数块内容，
  * 
  */
 void MarginalizationInfo::preMarginalize()
@@ -168,13 +168,13 @@ void* ThreadsConstructA(void* threadsstruct)
     // 遍历这么多分配过来的任务
     for (auto it : p->sub_factors)
     {
-        // 遍历参数块
-        for (int i = 0; i < static_cast<int>(it->parameter_blocks.size()); i++)
+        // 遍历参数块，把大的H矩阵计算出来
+        for (int i = 0; i < static_cast<int>(it->parameter_blocks.size()); i++)//重投影是4
         {
             int idx_i = p->parameter_block_idx[reinterpret_cast<long>(it->parameter_blocks[i])]; // 在大矩阵中的id，也就是落座的位置
-            int size_i = p->parameter_block_size[reinterpret_cast<long>(it->parameter_blocks[i])];
+            int size_i = p->parameter_block_size[reinterpret_cast<long>(it->parameter_blocks[i])];//global size
             // 确保是local size
-            if (size_i == 7)
+            if (size_i == 7)//如果是位姿，要改变global size为local size
                 size_i = 6;
             // 之前pre margin 已经算好了各个残差和雅克比，这里取出来
             Eigen::MatrixXd jacobian_i = it->jacobians[i].leftCols(size_i);
@@ -198,7 +198,7 @@ void* ThreadsConstructA(void* threadsstruct)
                 }
             }
             // 然后构建g矩阵
-            // ? : 为什么不是-JTb
+            // ? : 为什么不是-JTb，因为负号没影响，后面算残差也没有加负号
             p->b.segment(idx_i, size_i) += jacobian_i.transpose() * it->residuals;
         }
     }
@@ -303,7 +303,7 @@ void MarginalizationInfo::marginalize()
         pthread_join( tids[i], NULL );
         // 把各个子模块拼起来，就是最终的Hx = g的矩阵了 
         A += threadsstruct[i].A;
-        b += threadsstruct[i].b;
+        b += threadsstruct[i].b;//根据A和b把delte x求出来，就实现了手写后端过程，把所有约束块构建A和b，迭代求解
     }
     //ROS_DEBUG("thread summing up costs %f ms", t_thread_summing.toc());
     //ROS_INFO("A diff %f , b diff %f ", (A - tmp_A).sum(), (b - tmp_b).sum());
@@ -317,7 +317,7 @@ void MarginalizationInfo::marginalize()
     //ROS_ASSERT_MSG(saes.eigenvalues().minCoeff() >= -1e-4, "min eigenvalue %f", saes.eigenvalues().minCoeff());
     // 一个逆矩阵的特征值是原矩阵的倒数，特征向量相同　select类似c++中 ? :运算符
     // 利用特征值取逆来构造其逆矩阵
-    Eigen::MatrixXd Amm_inv = saes.eigenvectors() * Eigen::VectorXd((saes.eigenvalues().array() > eps).select(saes.eigenvalues().array().inverse(), 0)).asDiagonal() * saes.eigenvectors().transpose();
+    Eigen::MatrixXd Amm_inv = saes.eigenvectors() * Eigen::VectorXd((saes.eigenvalues().array() > eps).select(saes.eigenvalues().array().inverse(), 0)).asDiagonal() * saes.eigenvectors().transpose();//这里之所以前面那个特征向量不为逆，是因为分解出来的相当于本身就是已经逆过去的
     //printf("error1: %f\n", (Amm * Amm_inv - Eigen::MatrixXd::Identity(m, m)).sum());
 
     Eigen::VectorXd bmm = b.segment(0, m);  // 带边缘化的大小

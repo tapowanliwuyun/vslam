@@ -52,7 +52,8 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
     //shift to base frame
     Vector3d vio_P_cur;
     Matrix3d vio_R_cur;
-    if (sequence_cnt != cur_kf->sequence)   // 发生了sequence的跳变
+    if (sequence_cnt != cur_kf->sequence)   // 发生了sequence的跳变，也就是sequence的合并，w_r_vio和w_t_vio是两个子地图之间的位姿差 
+    
     {
         sequence_cnt++;
         // 复位一些变量
@@ -75,7 +76,7 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
     if (flag_detect_loop)
     {
         TicToc tmp_t;
-        loop_index = detectLoop(cur_kf, cur_kf->index);
+        loop_index = detectLoop(cur_kf, cur_kf->index);//第一个参数为当前帧信息一个指针，第二个为一个索引
     }
     else
     {
@@ -91,7 +92,7 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
             // 更新最早回环帧，用来确定全局优化的范围
             if (earliest_loop_index > loop_index || earliest_loop_index == -1)
                 earliest_loop_index = loop_index;
-
+            //下面主要是做一个多地图合并的事情
             Vector3d w_P_old, w_P_cur, vio_P_cur;
             Matrix3d w_R_old, w_R_cur, vio_R_cur;
             old_kf->getVioPose(w_P_old, w_R_old);
@@ -108,7 +109,7 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
             double shift_yaw;
             Matrix3d shift_r;
             Vector3d shift_t; 
-            // 回环矫正前的位姿认为是T_w'_cur
+            // 回环矫正前的位姿认为是T_w'_cur，也就是新的帧所在的sequence坐标系下
             // 下面求得是 T_w_cur * T_cur_w' = T_w_w'
             shift_yaw = Utility::R2ypr(w_R_cur).x() - Utility::R2ypr(vio_R_cur).x();
             shift_r = Utility::ypr2R(Vector3d(shift_yaw, 0, 0));
@@ -141,7 +142,7 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
                 sequence_loop[cur_kf->sequence] = 1;
             }
             m_optimize_buf.lock();
-            optimize_buf.push(cur_kf->index);   // 相当于通知4dof优化线程开始干活
+            optimize_buf.push(cur_kf->index);   // 相当于通知4dof优化线程开始干活，因为单独开了一个线程，检测这个数据
             m_optimize_buf.unlock();
         }
 	}
@@ -338,7 +339,7 @@ int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
 {
     // put image into image_pool; for visualization
     cv::Mat compressed_image;
-    if (DEBUG_IMAGE)
+    if (DEBUG_IMAGE)//可视化相关
     {
         int feature_num = keyframe->keypoints.size();
         cv::resize(keyframe->image, compressed_image, cv::Size(376, 240));
@@ -350,7 +351,7 @@ int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
     QueryResults ret;
     TicToc t_query;
     // 调用词袋查询接口，查询结果是ret，最多返回4个备选KF，查找距离当前至少50帧的KF
-    db.query(keyframe->brief_descriptors, ret, 4, frame_index - 50);
+    db.query(keyframe->brief_descriptors, ret, 4, frame_index - 50);//第一个参数为当前帧的描述子；第二个参数为查询到的结果；第三个参数为备选的数量；第四个参数为查找的最大帧的索引，这里为当前帧50帧之前的帧
     //printf("query time: %f", t_query.toc());
     //cout << "Searching for Image " << frame_index << ". " << ret << endl;
 
@@ -361,14 +362,14 @@ int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
     // ret[0] is the nearest neighbour's score. threshold change with neighour score
     bool find_loop = false;
     cv::Mat loop_result;
-    if (DEBUG_IMAGE)
+    if (DEBUG_IMAGE)//可视化操作
     {
         loop_result = compressed_image.clone();
         if (ret.size() > 0)
             putText(loop_result, "neighbour score:" + to_string(ret[0].Score), cv::Point2f(10, 50), CV_FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255));
     }
     // visual loop result 
-    if (DEBUG_IMAGE)
+    if (DEBUG_IMAGE)//可视化操作
     {
         for (unsigned int i = 0; i < ret.size(); i++)
         {

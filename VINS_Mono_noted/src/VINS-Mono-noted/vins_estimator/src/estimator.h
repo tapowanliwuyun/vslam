@@ -106,13 +106,13 @@ class Estimator
     double initial_timestamp;
 
 
-    double para_Pose[WINDOW_SIZE + 1][SIZE_POSE];
-    double para_SpeedBias[WINDOW_SIZE + 1][SIZE_SPEEDBIAS];
-    double para_Feature[NUM_OF_F][SIZE_FEATURE];
-    double para_Ex_Pose[NUM_OF_CAM][SIZE_POSE];
-    double para_Retrive_Pose[SIZE_POSE];
-    double para_Td[1][1];
-    double para_Tr[1][1];
+    double para_Pose[WINDOW_SIZE + 1][SIZE_POSE]; //4+3
+    double para_SpeedBias[WINDOW_SIZE + 1][SIZE_SPEEDBIAS]; //速度家零偏 3+3+3
+    double para_Feature[NUM_OF_F][SIZE_FEATURE]; //维护的是逆深度，故为1
+    double para_Ex_Pose[NUM_OF_CAM][SIZE_POSE]; //4+3
+    double para_Retrive_Pose[SIZE_POSE]; //4+3 ， 回环检测相关的
+    double para_Td[1][1];// 时间戳矫正，一个标量
+    double para_Tr[1][1];// 好像没有用到
 
     int loop_window_index;
 

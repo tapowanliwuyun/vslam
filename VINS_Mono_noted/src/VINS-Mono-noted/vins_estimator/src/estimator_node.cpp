@@ -339,8 +339,8 @@ void process()
             for (unsigned int i = 0; i < img_msg->points.size(); i++)
             {
                 int v = img_msg->channels[0].values[i] + 0.5;
-                int feature_id = v / NUM_OF_CAM;
-                int camera_id = v % NUM_OF_CAM;
+                int feature_id = v / NUM_OF_CAM;//特征点的id
+                int camera_id = v % NUM_OF_CAM;//这是为双目设计的
                 double x = img_msg->points[i].x;    // 去畸变后归一化相机系坐标
                 double y = img_msg->points[i].y;
                 double z = img_msg->points[i].z;

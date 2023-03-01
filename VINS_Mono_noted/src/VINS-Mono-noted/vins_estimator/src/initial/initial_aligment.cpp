@@ -83,7 +83,7 @@ void RefineGravity(map<double, ImageFrame> &all_image_frame, Vector3d &g, Vector
     map<double, ImageFrame>::iterator frame_j;
     for(int k = 0; k < 4; k++)
     {
-        MatrixXd lxly(3, 2);
+        MatrixXd lxly(3, 2);//就是B
         lxly = TangentBasis(g0);
         int i = 0;
         for (frame_i = all_image_frame.begin(); next(frame_i) != all_image_frame.end(); frame_i++, i++)
@@ -171,8 +171,8 @@ bool LinearAlignment(map<double, ImageFrame> &all_image_frame, Vector3d &g, Vect
         double dt = frame_j->second.pre_integration->sum_dt;
 
         tmp_A.block<3, 3>(0, 0) = -dt * Matrix3d::Identity();
-        tmp_A.block<3, 3>(0, 6) = frame_i->second.R.transpose() * dt * dt / 2 * Matrix3d::Identity();
-        tmp_A.block<3, 1>(0, 9) = frame_i->second.R.transpose() * (frame_j->second.T - frame_i->second.T) / 100.0;     
+        tmp_A.block<3, 3>(0, 6) = frame_i->second.R.transpose() * dt * dt / 2 * Matrix3d::Identity();   //frame_i->second.R 实际上 是co到bk
+        tmp_A.block<3, 1>(0, 9) = frame_i->second.R.transpose() * (frame_j->second.T - frame_i->second.T) / 100.0;     // 后面会补偿回来这100
         tmp_b.block<3, 1>(0, 0) = frame_j->second.pre_integration->delta_p + frame_i->second.R.transpose() * frame_j->second.R * TIC[0] - TIC[0];
         //cout << "delta_p   " << frame_j->second.pre_integration->delta_p.transpose() << endl;
         tmp_A.block<3, 3>(3, 0) = -Matrix3d::Identity();
@@ -202,11 +202,11 @@ bool LinearAlignment(map<double, ImageFrame> &all_image_frame, Vector3d &g, Vect
     A = A * 1000.0;
     b = b * 1000.0;
     x = A.ldlt().solve(b);
-    double s = x(n_state - 1) / 100.0;
+    double s = x(n_state - 1) / 100.0; // 补偿之前除的100 ，得到估计的真实尺度
     ROS_DEBUG("estimated scale: %f", s);
     g = x.segment<3>(n_state - 4);
     ROS_DEBUG_STREAM(" result g     " << g.norm() << " " << g.transpose());
-    // 做一些检查
+    // 做一些检查；首先重力的模要在一个合理的范围，其次保证尺度为正的
     if(fabs(g.norm() - G.norm()) > 1.0 || s < 0)
     {
         return false;

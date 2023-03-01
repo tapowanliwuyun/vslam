@@ -47,8 +47,8 @@ struct ReprojectionError3D
 	                                   const double observed_y) 
 	{
 	  return (new ceres::AutoDiffCostFunction<
-	          ReprojectionError3D, 2, 4, 3, 3>(
-	          	new ReprojectionError3D(observed_x,observed_y)));
+	          ReprojectionError3D, 2, 4, 3, 3>(	// 2是残差纬度；4，3，3是参数块的纬度
+	          	new ReprojectionError3D(observed_x,observed_y)));//
 	}
 
 	double observed_u;

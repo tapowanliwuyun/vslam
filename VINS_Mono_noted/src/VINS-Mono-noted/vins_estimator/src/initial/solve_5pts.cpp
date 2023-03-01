@@ -192,9 +192,9 @@ namespace cv {
 /**
  * @brief 根据两帧匹配对求解R和带尺度的t
  * 
- * @param[in] corres 
- * @param[in] Rotation 
- * @param[in] Translation 
+ * @param[in] corres   入参
+ * @param[in] Rotation  出参
+ * @param[in] Translation   出参
  * @return true 
  * @return false 
  */
@@ -221,7 +221,7 @@ bool MotionEstimator::solveRelativeRT(const vector<pair<Vector3d, Vector3d>> &co
 
         Eigen::Matrix3d R;
         Eigen::Vector3d T;
-        // cv -> eigen
+        // cv::Mat -> eigen
         for (int i = 0; i < 3; i++)
         {   
             T(i) = trans.at<double>(i, 0);
@@ -231,6 +231,7 @@ bool MotionEstimator::solveRelativeRT(const vector<pair<Vector3d, Vector3d>> &co
         // opencv得到的是T21,这里换成T12
         Rotation = R.transpose();
         Translation = -R.transpose() * T;
+        //内点数大于12表明可信度高
         if(inlier_cnt > 12)
             return true;
         else

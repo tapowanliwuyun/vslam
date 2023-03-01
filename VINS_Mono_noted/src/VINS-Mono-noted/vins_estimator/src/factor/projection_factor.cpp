@@ -21,16 +21,16 @@ ProjectionFactor::ProjectionFactor(const Eigen::Vector3d &_pts_i, const Eigen::V
 bool ProjectionFactor::Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
 {
     TicToc tic_toc;
-    Eigen::Vector3d Pi(parameters[0][0], parameters[0][1], parameters[0][2]);
+    Eigen::Vector3d Pi(parameters[0][0], parameters[0][1], parameters[0][2]);//第i帧位姿，Twb
     Eigen::Quaterniond Qi(parameters[0][6], parameters[0][3], parameters[0][4], parameters[0][5]);
 
-    Eigen::Vector3d Pj(parameters[1][0], parameters[1][1], parameters[1][2]);
+    Eigen::Vector3d Pj(parameters[1][0], parameters[1][1], parameters[1][2]);//第j帧位姿
     Eigen::Quaterniond Qj(parameters[1][6], parameters[1][3], parameters[1][4], parameters[1][5]);
 
-    Eigen::Vector3d tic(parameters[2][0], parameters[2][1], parameters[2][2]);
+    Eigen::Vector3d tic(parameters[2][0], parameters[2][1], parameters[2][2]);//外参，相机系到imu系的变换，Tbc
     Eigen::Quaterniond qic(parameters[2][6], parameters[2][3], parameters[2][4], parameters[2][5]);
 
-    double inv_dep_i = parameters[3][0];
+    double inv_dep_i = parameters[3][0];//3D点逆深度
     // 地图点在i帧相机坐标系下坐标
     Eigen::Vector3d pts_camera_i = pts_i / inv_dep_i;
     // 转成第i帧imu坐标系
@@ -43,14 +43,14 @@ bool ProjectionFactor::Evaluate(double const *const *parameters, double *residua
     Eigen::Vector3d pts_camera_j = qic.inverse() * (pts_imu_j - tic);
     Eigen::Map<Eigen::Vector2d> residual(residuals);
 
-#ifdef UNIT_SPHERE_ERROR 
+#ifdef UNIT_SPHERE_ERROR //球面模型
     residual =  tangent_base * (pts_camera_j.normalized() - pts_j.normalized());
-#else
+#else //普通模型
     double dep_j = pts_camera_j.z();    // 第j帧相机系下深度
     residual = (pts_camera_j / dep_j).head<2>() - pts_j.head<2>();  // 重投影误差
 #endif
 
-    residual = sqrt_info * residual;    // 误差乘上信息矩阵
+    residual = sqrt_info * residual;    // 误差乘上信息矩阵，信息矩阵在estimator.cpp的第23行计算，其实就是重投影误差的置信度，就是重投影的精度体现于这个置信度，统一设置为1.5个像素的
 
     if (jacobians)
     {
