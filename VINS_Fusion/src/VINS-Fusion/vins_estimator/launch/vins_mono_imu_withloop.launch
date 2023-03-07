@@ -1,0 +1,11 @@
+<launch>
+
+    <arg name = "config_file" default = "/home/bupo/my_study/VSLAM/VINS_Fusion/src/VINS-Fusion/config/euroc/euroc_mono_imu_config.yaml"/>
+
+    <node name="rvizvisualisation" pkg="rviz" type="rviz" output="log" args="-d $(find vins)/../config/vins_rviz_config.rviz" />
+
+    <node name="vins_node" pkg="vins" type="vins_node" output="screen"  args="$(arg config_file)"/>
+
+    <node name="loop_fusion_node" pkg="loop_fusion" type="loop_fusion_node" output="screen"  args="$(arg config_file)"/>
+
+</launch>
