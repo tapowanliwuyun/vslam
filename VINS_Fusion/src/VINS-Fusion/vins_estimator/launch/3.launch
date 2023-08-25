@@ -1,0 +1,7 @@
+<launch>
+
+    <arg name = "config_file" default = "/home/bupo/my_study/VSLAM/VINS_Fusion/src/VINS-Fusion/config/euroc/euroc_mono_imu_config.yaml"/>
+
+    <node name="loop_fusion_node" pkg="loop_fusion" type="loop_fusion_node" output="screen"  args="$(arg config_file)"/>
+
+</launch>
